@@ -1,0 +1,6 @@
+.csv
+.python-version
+ThetaExporter.spec
+/build
+/dist
+.DS_Store
