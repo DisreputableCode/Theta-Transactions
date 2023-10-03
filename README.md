@@ -5,6 +5,10 @@ To solve this, I have written a python app that downloads up to 52 weeks (one ye
 
 I have also created executables for MacOS and Windows (.app and .exe) using Pyinstaller. Please note, these executables are currently unsigned, so are likely to set off antivirus and OS protections, and may take a few seconds to launch due to the nature of Pyinstaller packages - double click and be patient
 
+### Updated 03/10/2023
+* Switched out the async functions to synchronous as looks like the explorer has added/increased rate limiting on the API. Taking the requests one at a time seems to work fine.
+* Added GUI feedback and logging.
+
 ## How to Use
 Launch the app - be patient after double clicking
 
@@ -19,4 +23,4 @@ Launch the app - be patient after double clicking
 * **Start**: Click to start the download
 	* You will be asked where to save the file once start is pressed
 
-The program typically takes 30 seconds or so to run for 52 weeks, but will be dependant on your internet connection and computer.
+The program typically takes 60 seconds or so to run for 52 weeks, but will be dependant on your internet connection and computer.
