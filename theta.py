@@ -1,8 +1,8 @@
-import datetime, asyncio, requests, aiohttp, webbrowser
+import datetime, requests, webbrowser
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, messagebox
-
+from tkinter import filedialog, messagebox, ttk
+import threading
 
 class ThetaExporter:
     def __init__(self):
@@ -34,21 +34,49 @@ class ThetaExporter:
         self.weeks_entry.insert(0, '52')
         self.weeks_entry.pack()
 
-        project_label = tk.Label(self.window, text='Project by Dane Lewis (https://github.com/danelewis)', font=('Arial', 12), fg='gray')
+        project_label = tk.Label(self.window, text='Project by Dane Lewis (https://github.com/disreputablecode)', font=('Arial', 12), fg='gray')
         project_label.pack(side=tk.BOTTOM, pady=5)
         project_label.bind('<Button-1>', self.open_link)
 
         start_button = tk.Button(self.window, text='Start', command=self.validate_and_run)
         start_button.pack()
 
+    def show_working_dialog(self):
+        self.working_dialog = tk.Toplevel(self.window)
+        self.working_dialog.title('Working')
+        self.working_dialog.geometry('600x500')
+
+        self.progress_label = tk.Label(self.working_dialog, text='00/00 weeks retrieved')
+        self.progress_label.pack(pady=10)
+
+        self.progress = ttk.Progressbar(self.working_dialog, orient='horizontal', length=500, mode='determinate')
+        self.progress.pack(pady=10)
+
+        self.log_text = tk.Text(self.working_dialog, width=80, height=30, state='disabled')
+        self.log_text.pack(pady=10)
+
+        self.working_dialog.transient(self.window)
+        self.working_dialog.grab_set()
+
+    def update_progress(self, count, total):
+        self.progress['value'] = (count / total) * 100
+        self.progress_label.config(text=f'{count}/{total} weeks retrieved')
+        self.working_dialog.update_idletasks()
+
+    def log_message(self, message):
+        self.log_text.config(state='normal')
+        self.log_text.insert(tk.END, message + '\n')
+        self.log_text.config(state='disabled')
+        self.log_text.see(tk.END)
+
     def validate_integer(self, var):
         if var.isdigit():
             return True
         else:
             return False
-        
+
     def open_link(self, event):
-        webbrowser.open_new('https://github.com/danelewis')
+        webbrowser.open_new('https://github.com/disreputablecode')
 
     def main_enabled(self, action):
         if action:
@@ -92,66 +120,65 @@ class ThetaExporter:
     def get_data(self, wallet, start, weeks, file_path):
         self.main_enabled(False)
         self.show_working_dialog()
-        self.window.update()
+        self.update_progress(0, weeks)
+        self.data_thread = threading.Thread(target=self.fetch_data, args=(wallet, start, weeks, file_path))
+        self.data_thread.start()
 
+    def fetch_data(self, wallet, start, weeks, file_path):
         dates = []
-        txns = []
 
-        # Generate start and end times 7 days at a time, as the API only allows 7 days max per request
         for i in range(weeks):
             end = start + 604800
             dates.append((start, end))
             start = end
 
-        # get 7 day increments async
-        loop = asyncio.get_event_loop()
-        txns = loop.run_until_complete(self.run_tasks_async(dates, wallet))
+        with open(file_path, 'w', newline='') as csv_file:
+            writer = None
 
-        # convert to dataframe
-        df = pd.DataFrame(txns)
+            for idx, date in enumerate(dates):
+                self.log_message(f'Getting week {idx+1} of {len(dates)}')
+                data = self.get_csv(date, wallet)
+                df = pd.DataFrame(data)
+                df['timestamp'] = df['timestamp'].str.replace('"', '')
 
-        # timestamp column has extra double quotes in the field
-        df['timestamp'] = df['timestamp'].str.replace('"', '')
+                if writer is None:
+                    df.to_csv(csv_file, mode='a', header=True, index=False)
+                    writer = True
+                else:
+                    df.to_csv(csv_file, mode='a', header=False, index=False)
 
-        # export dataframe to sigle CSV
-        df.to_csv(file_path, index=False)
+                self.update_progress(idx+1, len(dates))
 
-        # close working dialog and re-enable main window
         self.working_dialog.destroy()
-        messagebox.showinfo('Complete', 'Transaction retreival complete!')
+        messagebox.showinfo('Complete', 'Transaction retrieval complete!')
         self.main_enabled(True)
 
-    def show_working_dialog(self):
-        self.working_dialog = tk.Toplevel(self.window)
-        self.working_dialog.title('Working')
-        self.working_dialog.geometry('200x50')
-        
-        working_label = tk.Label(self.working_dialog, text='Working on it…')
-        working_label.pack()
-
-        self.working_dialog.transient(self.window)
-        self.working_dialog.grab_set()
-
-    async def get_csv(self, date, wallet):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f'https://explorer.thetatoken.org:8443/api/accountTx/history/{wallet}?startDate={date[0]}&endDate={date[1]}') as response:
-                data = await response.json()
+    def get_csv(self, date, wallet):
+        url = f'https://explorer.thetatoken.org:8443/api/accountTx/history/{wallet}?startDate={date[0]}&endDate={date[1]}'
+        count = 0
+        while count < 10:
+            count += 1
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                data = response.json()
+                self.log_message(f'Attempt {count} succeeded to get week {datetime.datetime.fromtimestamp(date[0])} - {datetime.datetime.fromtimestamp(date[1])}.')
                 return data['body']
+            except Exception as e:
+                if count < 10:
+                    self.log_message(f'Attempt {count} failed to get week {datetime.datetime.fromtimestamp(date[0])} - {datetime.datetime.fromtimestamp(date[1])}. Retrying...')
+                else:
+                    self.log_message(f'Attempt {count} failed to get week {datetime.datetime.fromtimestamp(date[0])} - {datetime.datetime.fromtimestamp(date[1])}. Failed to get data.')
+                    exit()
 
-    async def run_tasks_async(self, dates, wallet):
-        tasks = []
-        for date in dates:
-            task = asyncio.create_task(self.get_csv(date, wallet))
-            tasks.append(task)
-
+    def run_tasks(self, dates, wallet):
         txns = []
-        for task in asyncio.as_completed(tasks):
-            data = await task
+        for idx, date in enumerate(dates):
+            self.log_message(f'Getting week {idx+1} of {len(dates)}')
+            data = self.get_csv(date, wallet)
             txns += data
-
+            self.update_progress(idx+1, len(dates))
         return txns
-           
 
-if __name__ == '__main__':
-    app = ThetaExporter()
-    app.window.mainloop()
+app = ThetaExporter()
+app.window.mainloop()
