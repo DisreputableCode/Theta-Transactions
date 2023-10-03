@@ -3,7 +3,8 @@ The Theta Blockchain explorer only allows 7 days worth of transactions to be dow
 
 To solve this, I have written a python app that downloads up to 52 weeks (one year) worth of transactions for a given wallet address, and combines the CSV files into a single file in less than a minute.
 
-I have also created executables for MacOS and Windows (.app and .exe) using Pyinstaller. Please note, these executables are currently unsigned, so are likely to set off antivirus and OS protections, and may take a few seconds to launch due to the nature of Pyinstaller packages - double click and be patient
+~~I have also created executables for MacOS and Windows (.app and .exe) using Pyinstaller. Please note, these executables are currently unsigned, so are likely to set off antivirus and OS protections, and may take a few seconds to launch due to the nature of Pyinstaller packages - double click and be patient~~
+*Removed the executables as to much work to maintain. Please run the python script from source.*
 
 ### Updated 03/10/2023
 * Switched out the async functions to synchronous as looks like the explorer has added/increased rate limiting on the API. Taking the requests one at a time seems to work fine.
